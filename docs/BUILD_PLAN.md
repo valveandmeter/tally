@@ -27,9 +27,10 @@ Build a TinyStopwatch-style desktop timer for macOS and Windows that logs time s
 
 ## Phase 0: Project setup
 
-- [ ] Review Claude Code's proposed project structure.
-- [ ] Scaffold the Tauri 2 project and confirm a blank window runs on Mac and Windows.
-- [ ] Push to GitHub.
+- [x] Review Claude Code's proposed project structure.
+- [x] Scaffold the Tauri 2 project and confirm a blank window runs on Mac.
+- [ ] Confirm a blank window runs on Windows.
+- [ ] Push to GitHub (deferred — repo is local-only for now, by choice).
 
 **Done when:** the empty app launches on both machines from the same code.
 
