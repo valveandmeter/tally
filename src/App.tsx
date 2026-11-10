@@ -1,50 +1,103 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
+import {
+  createTimer,
+  discardTimer,
+  formatElapsed,
+  listTimers,
+  onTimersState,
+  pauseTimer,
+  renameTimer,
+  startTimer,
+  type Timer,
+} from "./lib/api";
+import { TimerRow } from "./components/TimerRow";
+
+const AUTO_PAUSE_BANNER_MS = 4000;
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [timers, setTimers] = useState<Timer[]>([]);
+  const [banner, setBanner] = useState<string | null>(null);
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
+  const bannerTimeout = useRef<number | undefined>(undefined);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  useEffect(() => {
+    listTimers().then(setTimers);
+    const unlistenPromise = onTimersState((state) => setTimers(state.timers));
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+      window.clearTimeout(bannerTimeout.current);
+    };
+  }, []);
+
+  const showAutoPauseBanner = (label: string, elapsedSeconds: number) => {
+    setBanner(`Paused ${label} at ${formatElapsed(elapsedSeconds)}`);
+    window.clearTimeout(bannerTimeout.current);
+    bannerTimeout.current = window.setTimeout(() => setBanner(null), AUTO_PAUSE_BANNER_MS);
+  };
+
+  const handleToggle = async (timer: Timer) => {
+    if (timer.status === "running") {
+      await pauseTimer(timer.id);
+      return;
+    }
+    const autoPaused = await startTimer(timer.id);
+    if (autoPaused) {
+      showAutoPauseBanner(autoPaused.label, autoPaused.elapsedSeconds);
+    }
+  };
+
+  const handleRename = (id: string, label: string) => {
+    renameTimer(id, label);
+    setJustCreatedId(null);
+  };
+
+  const handleDiscard = (id: string) => {
+    discardTimer(id);
+  };
+
+  const handleNewTimer = async () => {
+    const timer = await createTimer("New timer");
+    setJustCreatedId(timer.id);
+  };
+
+  const runningCount = timers.filter((t) => t.status === "running").length;
+  const pausedCount = timers.length - runningCount;
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="popover">
+      <header className="popover__header">
+        <h1>Timers</h1>
+        <button className="popover__settings" aria-label="Settings" disabled>
+          ⚙
+        </button>
+      </header>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+      {banner && <div className="popover__banner">{banner}</div>}
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      {timers.length > 0 && (
+        <p className="popover__summary">
+          {runningCount} running · {pausedCount} paused
+        </p>
+      )}
+
+      <ul className="timer-list">
+        {timers.map((timer) => (
+          <TimerRow
+            key={timer.id}
+            timer={timer}
+            onToggle={handleToggle}
+            onRename={handleRename}
+            onDiscard={handleDiscard}
+            autoFocusLabel={timer.id === justCreatedId}
+          />
+        ))}
+      </ul>
+
+      <button className="popover__new-timer" onClick={handleNewTimer}>
+        + New timer
+      </button>
+    </div>
   );
 }
 

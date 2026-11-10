@@ -36,15 +36,20 @@ Build a TinyStopwatch-style desktop timer for macOS and Windows that logs time s
 
 ## Phase 1: Local timers
 
-- [ ] Menu bar item showing elapsed time on macOS; tray icon with tooltip on Windows.
-- [ ] Popover with the timer list: Pause/Resume, discard, and "+ New timer" (placeholder task for now).
-- [ ] Multiple timers, each with its own time and note; only one runs at a time, and starting or resuming one pauses the running one.
-- [ ] Brief in-popover notice when a timer is auto-paused ("Paused Homepage hero revisions at 0:42:13").
-- [ ] Menu bar always shows the running timer's time, or a paused icon when none is running.
-- [ ] Timers persist across restarts and sleep (SQLite).
-- [ ] All colors defined as theme variables, with Light and Dark working from the start.
+- [x] Menu bar item showing elapsed time on macOS; tray icon with tooltip on Windows (Windows untested so far).
+- [x] Popover with the timer list: Pause/Resume, discard, and "+ New timer" (placeholder task for now).
+- [x] Multiple timers, each with its own time and note; only one runs at a time, and starting or resuming one pauses the running one.
+- [x] Brief in-popover notice when a timer is auto-paused ("Paused Homepage hero revisions at 0:42:13").
+- [x] Menu bar always shows the running timer's time, or a paused icon when none is running.
+- [x] Timers persist across restarts and sleep (SQLite).
+- [x] All colors defined as theme variables, with Light and Dark working from the start.
 
-**Done when:** you can switch between three timers with only one ever running, quit the app, reopen it, and find them intact on both platforms.
+**Done when:** you can switch between three timers with only one ever running, quit the app, reopen it, and find them intact on both platforms. **Confirmed:** tray icon + popover working on Mac. **Still to verify yourself:** multi-timer switching, discard confirmation, persistence across a full quit/relaunch, and Light/Dark following system — worth a pass before Phase 3 (logging) once there's real data at stake. Windows not tested yet.
+
+Known simplifications from the spec, to revisit in Phase 4 polish:
+- No separate "paused" tray icon yet — same icon throughout, state shown via the title/tooltip text only.
+- Popover dismiss-on-click-away uses window focus-loss, not a native macOS panel — works, but may feel slightly different from a true NSPopover.
+- No footer totals/pending count yet (needs real Wrike data — Phase 3).
 
 ## Phase 2: Wrike connection and search
 
