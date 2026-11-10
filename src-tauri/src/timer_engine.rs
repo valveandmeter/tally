@@ -11,6 +11,8 @@ pub struct TimerDto {
     pub label: String,
     pub status: String,
     pub elapsed_seconds: i64,
+    pub wrike_task_id: Option<String>,
+    pub wrike_bucket_client_id: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -26,6 +28,8 @@ fn to_dto(row: &TimerRow, now: chrono::DateTime<Utc>) -> TimerDto {
         label: row.label.clone(),
         status: row.status.clone(),
         elapsed_seconds: row.elapsed_seconds_at(now),
+        wrike_task_id: row.wrike_task_id.clone(),
+        wrike_bucket_client_id: row.wrike_bucket_client_id.clone(),
     }
 }
 
@@ -34,8 +38,13 @@ pub fn list_timers(conn: &Connection) -> Vec<TimerDto> {
     db::list(conn).iter().map(|r| to_dto(r, now)).collect()
 }
 
-pub fn create_timer(conn: &Connection, label: &str) -> TimerDto {
-    let row = db::insert(conn, label);
+pub fn create_timer(
+    conn: &Connection,
+    label: &str,
+    wrike_task_id: Option<&str>,
+    wrike_bucket_client_id: Option<&str>,
+) -> TimerDto {
+    let row = db::insert(conn, label, wrike_task_id, wrike_bucket_client_id);
     to_dto(&row, Utc::now())
 }
 

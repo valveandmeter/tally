@@ -64,9 +64,19 @@ pub fn create_timer(
     app: AppHandle,
     state: State<'_, Mutex<Connection>>,
     label: String,
+    wrike_task_id: Option<String>,
+    wrike_bucket_client_id: Option<String>,
 ) -> Result<TimerDto, String> {
     let conn = state.lock().map_err(|e| e.to_string())?;
-    let dto = timer_engine::create_timer(&conn, &label);
+    let dto = timer_engine::create_timer(
+        &conn,
+        &label,
+        wrike_task_id.as_deref(),
+        wrike_bucket_client_id.as_deref(),
+    );
+    if let Some(task_id) = &dto.wrike_task_id {
+        crate::db::record_task_usage(&conn, task_id);
+    }
     broadcast(&app, &conn);
     Ok(dto)
 }

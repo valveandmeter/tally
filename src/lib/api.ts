@@ -8,6 +8,8 @@ export interface Timer {
   label: string;
   status: TimerStatus;
   elapsedSeconds: number;
+  wrikeTaskId: string | null;
+  wrikeBucketClientId: string | null;
 }
 
 export interface TimersState {
@@ -24,8 +26,16 @@ export function listTimers(): Promise<Timer[]> {
   return invoke("list_timers");
 }
 
-export function createTimer(label: string): Promise<Timer> {
-  return invoke("create_timer", { label });
+export function createTimer(
+  label: string,
+  wrikeTaskId?: string,
+  wrikeBucketClientId?: string,
+): Promise<Timer> {
+  return invoke("create_timer", {
+    label,
+    wrikeTaskId: wrikeTaskId ?? null,
+    wrikeBucketClientId: wrikeBucketClientId ?? null,
+  });
 }
 
 export function startTimer(id: string): Promise<AutoPaused | null> {
@@ -46,6 +56,66 @@ export function discardTimer(id: string): Promise<void> {
 
 export function onTimersState(handler: (state: TimersState) => void): Promise<UnlistenFn> {
   return listen<TimersState>("timers://state", (event) => handler(event.payload));
+}
+
+export interface WrikeAccount {
+  name: string;
+  refreshedAt: string | null;
+}
+
+export interface ClientResult {
+  id: string;
+  name: string;
+  openTaskCount: number;
+  pinned: boolean;
+}
+
+export interface TaskResult {
+  id: string;
+  title: string;
+  clientId: string;
+  clientName: string;
+  projectPath: string;
+  status: string;
+}
+
+export interface SearchResults {
+  clients: ClientResult[];
+  tasks: TaskResult[];
+}
+
+export function wrikeStatus(): Promise<WrikeAccount | null> {
+  return invoke("wrike_status");
+}
+
+export function connectWrike(token: string): Promise<WrikeAccount> {
+  return invoke("connect_wrike", { token });
+}
+
+export function disconnectWrike(): Promise<void> {
+  return invoke("disconnect_wrike");
+}
+
+export function refreshWrikeCache(): Promise<void> {
+  return invoke("refresh_wrike_cache");
+}
+
+export function searchWrike(
+  query: string,
+  clientId: string | null,
+  assignedToMe: boolean,
+  includeCompleted: boolean,
+): Promise<SearchResults> {
+  return invoke("search_wrike", {
+    query,
+    clientId,
+    assignedToMe,
+    includeCompleted,
+  });
+}
+
+export function setClientPinned(clientId: string, pinned: boolean): Promise<void> {
+  return invoke("set_client_pinned", { clientId, pinned });
 }
 
 export function formatElapsed(totalSeconds: number): string {

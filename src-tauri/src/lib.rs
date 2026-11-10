@@ -1,7 +1,9 @@
 mod commands;
+mod commands_wrike;
 mod db;
 mod timer_engine;
 mod tray;
+mod wrike;
 
 use std::sync::Mutex;
 
@@ -20,6 +22,12 @@ pub fn run() {
             commands::pause_timer,
             commands::rename_timer,
             commands::discard_timer,
+            commands_wrike::wrike_status,
+            commands_wrike::connect_wrike,
+            commands_wrike::disconnect_wrike,
+            commands_wrike::refresh_wrike_cache,
+            commands_wrike::search_wrike,
+            commands_wrike::set_client_pinned,
         ])
         .setup(|app| {
             let conn = db::open(app.handle());

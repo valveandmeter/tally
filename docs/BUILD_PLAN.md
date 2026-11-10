@@ -53,13 +53,18 @@ Known simplifications from the spec, to revisit in Phase 4 polish:
 
 ## Phase 2: Wrike connection and search
 
-- [ ] Connect via permanent token first, then OAuth; store credentials in the keychain.
-- [ ] Load the Clients space and its folders as the client list; cache locally.
-- [ ] Type-ahead search with Clients and Tasks groups, client filter chip, "Assigned to me" and "Include completed" filters.
-- [ ] "Track time" on client rows and "Track to [Client] (no task)" in a filtered list.
-- [ ] Pinned clients and recent tasks before typing; keyboard navigation.
+- [x] Connect via permanent token (built, not yet verified against a real account — no token available yet). OAuth not started; permanent token confirmed sufficient to start.
+- [x] Load the Clients space and its folders as the client list; cache locally (built, unverified).
+- [x] Type-ahead search with Clients and Tasks groups, client filter chip, "Assigned to me" and "Include completed" filters (built, unverified).
+- [x] "Track time" on client rows and "Track to [Client] (no task)" in a filtered list (built, unverified).
+- [x] Pinned clients and recent tasks before typing; keyboard navigation (built, unverified).
 
-**Done when:** you can find any real task or client in under a second and start a timer on it.
+**Done when:** you can find any real task or client in under a second and start a timer on it. **Not yet verifiable** — needs a real Wrike permanent access token and confirmation that your account has a "Clients" space structured as CLAUDE.md assumes. Everything compiles and the UI flow works end-to-end against an empty/disconnected state; the actual Wrike API calls (endpoint paths, response field names) are implemented from verified current API v4 docs but untested against live data.
+
+Known simplifications to revisit later:
+- `project_path` only resolves one folder level under each client (the immediate subfolder) — deeper nesting falls back to "Client › Task" with no project segment.
+- Host for permanent-token connections defaults to `www.wrike.com`; if your account actually lives on a different Wrike data center, the first connect attempt will fail clearly and we'll adjust.
+- The "Clients" space name is still hardcoded (no Settings picker yet — that's Phase 4).
 
 ## Phase 3: Logging time
 
