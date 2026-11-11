@@ -24,8 +24,10 @@ pub fn format_elapsed(total_seconds: i64) -> String {
 }
 
 /// Recomputes current timer state and pushes it to both the popover (via
-/// event) and the tray icon, so every surface always agrees.
-fn broadcast(app: &AppHandle, conn: &Connection) {
+/// event) and the tray icon, so every surface always agrees. `pub(crate)`
+/// so other command modules (e.g. commands_wrike's log_timer) can trigger a
+/// re-broadcast after they mutate timers outside this module.
+pub(crate) fn broadcast(app: &AppHandle, conn: &Connection) {
     let timers = timer_engine::list_timers(conn);
     let running = timers.iter().find(|t| t.status == "running").cloned();
 

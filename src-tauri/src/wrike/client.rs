@@ -81,6 +81,11 @@ struct TasksPage {
     next_page_token: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct Timelog {
+    pub hours: f64,
+}
+
 impl WrikeClient {
     pub fn new(host: &str, token: &str) -> Self {
         Self {
@@ -94,15 +99,9 @@ impl WrikeClient {
         format!("https://{}/api/v4{}", self.host, path)
     }
 
-    async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, WrikeError> {
-        let resp = self
-            .http
-            .get(self.url(path))
-            .bearer_auth(&self.token)
-            .send()
-            .await
-            .map_err(|e| WrikeError::Network(e.to_string()))?;
-
+    async fn handle_response<T: serde::de::DeserializeOwned>(
+        resp: reqwest::Response,
+    ) -> Result<T, WrikeError> {
         let status = resp.status();
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(WrikeError::InvalidToken);
@@ -126,6 +125,56 @@ impl WrikeClient {
             .await
             .map_err(|e| WrikeError::Network(e.to_string()))
     }
+
+    async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, WrikeError> {
+        let resp = self
+            .http
+            .get(self.url(path))
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(|e| WrikeError::Network(e.to_string()))?;
+        Self::handle_response(resp).await
+    }
+
+    /// Like `get`, but builds the query string via reqwest so values needing
+    /// percent-encoding (e.g. the JSON-shaped `trackedDate` range filter)
+    /// come out correct instead of hand-formatted into the path.
+    async fn get_with_query<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<T, WrikeError> {
+        let resp = self
+            .http
+            .get(self.url(path))
+            .bearer_auth(&self.token)
+            .query(query)
+            .send()
+            .await
+            .map_err(|e| WrikeError::Network(e.to_string()))?;
+        Self::handle_response(resp).await
+    }
+
+    /// Wrike v4 create/update endpoints take their parameters as query
+    /// params, not a JSON body (confirmed for task creation; applied
+    /// consistently here).
+    async fn post<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<T, WrikeError> {
+        let resp = self
+            .http
+            .post(self.url(path))
+            .bearer_auth(&self.token)
+            .query(query)
+            .send()
+            .await
+            .map_err(|e| WrikeError::Network(e.to_string()))?;
+        Self::handle_response(resp).await
+    }
+
 
     pub async fn whoami(&self) -> Result<Contact, WrikeError> {
         let envelope: Envelope<Contact> = self.get("/contacts?me=true").await?;
@@ -174,5 +223,55 @@ impl WrikeClient {
             }
         }
         Ok(all)
+    }
+
+    /// Creates a task directly inside `folder_id`. Used for the client
+    /// bucket catch-all task ("[Client] – General time"), created once on
+    /// first use and cached afterward (see db::ClientRow::catch_all_task_id).
+    pub async fn create_task(&self, folder_id: &str, title: &str) -> Result<Task, WrikeError> {
+        let envelope: Envelope<Task> = self
+            .post(&format!("/folders/{folder_id}/tasks"), &[("title", title)])
+            .await?;
+        envelope.data.into_iter().next().ok_or(WrikeError::Api {
+            status: 200,
+            body: "no task returned after creation".to_string(),
+        })
+    }
+
+    /// `hours` is a decimal (e.g. 0.75 for 45 minutes); `tracked_date` is
+    /// `yyyy-MM-dd`.
+    pub async fn create_timelog(
+        &self,
+        task_id: &str,
+        hours: f64,
+        tracked_date: &str,
+        comment: &str,
+    ) -> Result<(), WrikeError> {
+        let hours_str = format!("{hours:.2}");
+        let _: Envelope<Timelog> = self
+            .post(
+                &format!("/tasks/{task_id}/timelogs"),
+                &[
+                    ("hours", hours_str.as_str()),
+                    ("trackedDate", tracked_date),
+                    ("comment", comment),
+                ],
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Sum of this user's logged hours between `start_date` and `end_date`
+    /// (inclusive, `yyyy-MM-dd`), for the popover footer's totals.
+    pub async fn sum_my_timelog_hours(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<f64, WrikeError> {
+        let range = format!(r#"{{"start":"{start_date}","end":"{end_date}"}}"#);
+        let envelope: Envelope<Timelog> = self
+            .get_with_query("/timelogs", &[("me", "true"), ("trackedDate", &range)])
+            .await?;
+        Ok(envelope.data.iter().map(|t| t.hours).sum())
     }
 }

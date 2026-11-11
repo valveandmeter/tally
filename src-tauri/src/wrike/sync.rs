@@ -73,6 +73,7 @@ pub async fn fetch(client: &WrikeClient) -> Result<(Vec<ClientRow>, Vec<TaskRow>
             id: folder.id.clone(),
             name: folder.title.clone(),
             open_task_count,
+            catch_all_task_id: None,
         });
 
         for task in tasks {
@@ -107,4 +108,8 @@ pub fn apply(conn: &Connection, clients: Vec<ClientRow>, tasks: Vec<TaskRow>) {
     db::replace_clients(conn, &clients);
     db::replace_tasks(conn, &tasks);
     db::touch_wrike_refreshed_at(conn);
+}
+
+pub fn catch_all_task_title(client_name: &str) -> String {
+    format!("{client_name}{CATCH_ALL_SUFFIX}")
 }

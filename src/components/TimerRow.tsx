@@ -7,12 +7,13 @@ interface Props {
   onToggle: (timer: Timer) => void;
   onRename: (id: string, label: string) => void;
   onDiscard: (id: string) => void;
+  onLog: (timer: Timer) => void;
   autoFocusLabel?: boolean;
 }
 
 const DISCARD_CONFIRM_THRESHOLD_SECONDS = 60;
 
-export function TimerRow({ timer, onToggle, onRename, onDiscard, autoFocusLabel }: Props) {
+export function TimerRow({ timer, onToggle, onRename, onDiscard, onLog, autoFocusLabel }: Props) {
   const [editing, setEditing] = useState(false);
   const [draftLabel, setDraftLabel] = useState(timer.label);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
@@ -50,6 +51,7 @@ export function TimerRow({ timer, onToggle, onRename, onDiscard, autoFocusLabel 
   };
 
   const isRunning = timer.status === "running";
+  const isLoggable = Boolean(timer.wrikeTaskId || timer.wrikeBucketClientId);
 
   return (
     <li className={`timer-row${isRunning ? " timer-row--running" : " timer-row--paused"}`}>
@@ -80,6 +82,11 @@ export function TimerRow({ timer, onToggle, onRename, onDiscard, autoFocusLabel 
         <button className="timer-row__action" onClick={() => onToggle(timer)}>
           {isRunning ? "Pause" : "Resume"}
         </button>
+        {isLoggable && (
+          <button className="timer-row__action timer-row__action--primary" onClick={() => onLog(timer)}>
+            Log to Wrike
+          </button>
+        )}
         {confirmingDiscard ? (
           <>
             <span className="timer-row__confirm-label">Discard?</span>

@@ -118,6 +118,40 @@ export function setClientPinned(clientId: string, pinned: boolean): Promise<void
   return invoke("set_client_pinned", { clientId, pinned });
 }
 
+export type LogOutcome =
+  | { kind: "logged"; label: string; minutes: number }
+  | { kind: "needsCatchAllConfirm"; clientId: string; clientName: string; suggestedTitle: string };
+
+export function logTimer(id: string): Promise<LogOutcome> {
+  return invoke("log_timer", { id });
+}
+
+export function confirmCatchAllTask(clientId: string): Promise<void> {
+  return invoke("confirm_catch_all_task", { clientId });
+}
+
+export interface Totals {
+  todayHours: number;
+  weekHours: number;
+  pendingCount: number;
+}
+
+export function getWrikeTotals(): Promise<Totals> {
+  return invoke("get_wrike_totals");
+}
+
+export function pendingTimelogCount(): Promise<number> {
+  return invoke("pending_timelog_count");
+}
+
+export function onQueueChanged(handler: () => void): Promise<UnlistenFn> {
+  return listen("queue://changed", () => handler());
+}
+
+export function formatHours(hours: number): string {
+  return formatElapsed(Math.round(hours * 3600));
+}
+
 export function formatElapsed(totalSeconds: number): string {
   const seconds = Math.max(0, Math.floor(totalSeconds));
   const hours = Math.floor(seconds / 3600);

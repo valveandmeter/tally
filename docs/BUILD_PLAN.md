@@ -68,13 +68,15 @@ Known simplifications to revisit later:
 
 ## Phase 3: Logging time
 
-- [ ] "Log to Wrike" creates a timelog on the task, rounded up to the next 5 minutes (minimum 5).
-- [ ] Client bucket time logs to the catch-all task, creating it after confirmation if missing.
-- [ ] Offline queue with automatic retry and a pending count.
-- [ ] Today and this week totals pulled from Wrike.
-- [ ] Clear errors for expired tokens and rate limits.
+- [x] "Log to Wrike" creates a timelog on the task, rounded up to the next 5 minutes (minimum 5) (built, unverified — see note below).
+- [x] Client bucket time logs to the catch-all task, creating it after confirmation if missing (built, unverified).
+- [x] Offline queue with automatic retry (every 10s while entries are pending) and a pending count in the footer (built, unverified).
+- [x] Today and this week totals pulled from Wrike, not summed locally (built, unverified).
+- [x] Clear errors for expired tokens (401) and rate limits (429, respects Retry-After) — surfaced as plain-English messages from WrikeError (built, unverified).
 
-**Done when:** a logged entry appears correctly in Wrike, and an entry logged offline arrives once you reconnect.
+**Done when:** a logged entry appears correctly in Wrike, and an entry logged offline arrives once you reconnect. **Not yet verifiable** — same blocker as Phase 2: no live Wrike token yet. Everything compiles and the UI flow works end-to-end (log button appears only on Wrike-linked timers, confirmation banner, catch-all confirm card, offline queue persists across restarts since it's a SQLite table).
+
+Known limitation, inherent to Wrike's API (not a bug to fix later): **no server-side idempotency** for the timelog-creation endpoint. If a submission times out on our end after Wrike actually received it, a retry will double-log. The retry loop only retries on a clear error response, not on ambiguous timeouts, to reduce — not eliminate — this risk. Flagging now since it only shows up under real network flakiness, which is hard to test for deliberately.
 
 ## Phase 4: Polish
 

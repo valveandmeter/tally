@@ -154,6 +154,12 @@ body {
   color: #b42318;
 }
 
+.timer-row__action--primary {
+  background: var(--color-button-primary-bg);
+  color: var(--color-button-primary-text);
+  border-color: transparent;
+}
+
 .timer-row__confirm-label {
   font-size: 12px;
   color: var(--color-text-secondary);
@@ -374,4 +380,42 @@ body {
   background: var(--color-panel);
   color: var(--color-text);
   cursor: pointer;
+}
+
+/* --- Footer --- */
+
+.popover__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--color-border);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.popover__footer-pending {
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+
+/* --- Catch-all confirm --- */
+
+.catch-all-confirm {
+  margin: 8px 16px;
+  padding: 12px;
+  border-radius: var(--radius-control);
+  background: var(--color-row);
+  font-size: 12px;
+}
+
+.catch-all-confirm p {
+  margin: 0 0 6px;
+}
+
+.catch-all-confirm__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }

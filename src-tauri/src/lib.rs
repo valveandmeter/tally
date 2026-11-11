@@ -28,6 +28,11 @@ pub fn run() {
             commands_wrike::refresh_wrike_cache,
             commands_wrike::search_wrike,
             commands_wrike::set_client_pinned,
+            commands_wrike::log_timer,
+            commands_wrike::confirm_catch_all_task,
+            commands_wrike::get_wrike_totals,
+            commands_wrike::pending_timelog_count,
+            commands_wrike::list_pending_timelogs,
         ])
         .setup(|app| {
             let conn = db::open(app.handle());
@@ -56,6 +61,7 @@ pub fn run() {
             });
 
             tray::setup(app.handle())?;
+            commands_wrike::start_queue_retry_loop(app.handle().clone());
 
             Ok(())
         })

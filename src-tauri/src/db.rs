@@ -52,6 +52,21 @@ pub struct ClientRow {
     pub id: String,
     pub name: String,
     pub open_task_count: i64,
+    pub catch_all_task_id: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingTimelog {
+    pub id: String,
+    pub wrike_task_id: String,
+    pub minutes: i64,
+    pub tracked_date: String, // yyyy-MM-dd
+    pub comment: String,
+    pub label: String, // for UI display only
+    pub attempts: i64,
+    pub last_error: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +147,7 @@ pub fn open(app: &AppHandle) -> Connection {
         [],
     )
     .expect("could not create wrike_clients table");
+    ensure_column(&conn, "wrike_clients", "catch_all_task_id", "TEXT");
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS wrike_tasks (
@@ -163,6 +179,22 @@ pub fn open(app: &AppHandle) -> Connection {
         [],
     )
     .expect("could not create wrike_recent_tasks table");
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pending_timelogs (
+            id TEXT PRIMARY KEY,
+            wrike_task_id TEXT NOT NULL,
+            minutes INTEGER NOT NULL,
+            tracked_date TEXT NOT NULL,
+            comment TEXT NOT NULL,
+            label TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            created_at TEXT NOT NULL
+        )",
+        [],
+    )
+    .expect("could not create pending_timelogs table");
 
     conn
 }
@@ -310,17 +342,60 @@ pub fn clear_wrike_account(conn: &Connection) {
 
 // --- Wrike cache ---
 
+/// Replaces the client cache with a fresh fetch from Wrike. `catch_all_task_id`
+/// isn't known to the fetch (we deliberately exclude catch-all tasks from
+/// what we read back from Wrike), so existing cached values are carried
+/// forward across the refresh rather than being wiped.
 pub fn replace_clients(conn: &Connection, clients: &[ClientRow]) {
+    let mut existing: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, catch_all_task_id FROM wrike_clients WHERE catch_all_task_id IS NOT NULL")
+            .expect("prepare existing catch-all ids");
+        for row in stmt
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .expect("query existing catch-all ids")
+            .filter_map(Result::ok)
+        {
+            existing.insert(row.0, row.1);
+        }
+    }
+
     let tx = conn.unchecked_transaction().expect("tx");
     tx.execute("DELETE FROM wrike_clients", []).expect("clear clients");
     for c in clients {
+        let catch_all_task_id = c.catch_all_task_id.clone().or_else(|| existing.get(&c.id).cloned());
         tx.execute(
-            "INSERT INTO wrike_clients (id, name, open_task_count) VALUES (?1, ?2, ?3)",
-            rusqlite::params![c.id, c.name, c.open_task_count],
+            "INSERT INTO wrike_clients (id, name, open_task_count, catch_all_task_id) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![c.id, c.name, c.open_task_count, catch_all_task_id],
         )
         .expect("insert client");
     }
     tx.commit().expect("commit clients");
+}
+
+pub fn set_catch_all_task_id(conn: &Connection, client_id: &str, task_id: &str) {
+    conn.execute(
+        "UPDATE wrike_clients SET catch_all_task_id = ?2 WHERE id = ?1",
+        rusqlite::params![client_id, task_id],
+    )
+    .expect("set catch-all task id");
+}
+
+pub fn get_client(conn: &Connection, client_id: &str) -> Option<ClientRow> {
+    conn.query_row(
+        "SELECT id, name, open_task_count, catch_all_task_id FROM wrike_clients WHERE id = ?1",
+        [client_id],
+        |row| {
+            Ok(ClientRow {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                open_task_count: row.get(2)?,
+                catch_all_task_id: row.get(3)?,
+            })
+        },
+    )
+    .ok()
 }
 
 pub fn replace_tasks(conn: &Connection, tasks: &[TaskRow]) {
@@ -347,13 +422,14 @@ pub fn replace_tasks(conn: &Connection, tasks: &[TaskRow]) {
 
 pub fn list_clients(conn: &Connection) -> Vec<ClientRow> {
     let mut stmt = conn
-        .prepare("SELECT id, name, open_task_count FROM wrike_clients ORDER BY name ASC")
+        .prepare("SELECT id, name, open_task_count, catch_all_task_id FROM wrike_clients ORDER BY name ASC")
         .expect("prepare clients");
     stmt.query_map([], |row| {
         Ok(ClientRow {
             id: row.get(0)?,
             name: row.get(1)?,
             open_task_count: row.get(2)?,
+            catch_all_task_id: row.get(3)?,
         })
     })
     .expect("query clients")
@@ -428,4 +504,87 @@ pub fn recent_task_ids(conn: &Connection, limit: i64) -> Vec<String> {
         .expect("query recents")
         .filter_map(Result::ok)
         .collect()
+}
+
+// --- Offline timelog queue ---
+
+fn pending_timelog_from_row(row: &Row) -> rusqlite::Result<PendingTimelog> {
+    let created_at: String = row.get("created_at")?;
+    Ok(PendingTimelog {
+        id: row.get("id")?,
+        wrike_task_id: row.get("wrike_task_id")?,
+        minutes: row.get("minutes")?,
+        tracked_date: row.get("tracked_date")?,
+        comment: row.get("comment")?,
+        label: row.get("label")?,
+        attempts: row.get("attempts")?,
+        last_error: row.get("last_error")?,
+        created_at: DateTime::parse_from_rfc3339(&created_at)
+            .map(|d| d.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now()),
+    })
+}
+
+pub fn enqueue_timelog(
+    conn: &Connection,
+    wrike_task_id: &str,
+    minutes: i64,
+    tracked_date: &str,
+    comment: &str,
+    label: &str,
+) -> PendingTimelog {
+    let row = PendingTimelog {
+        id: uuid::Uuid::new_v4().to_string(),
+        wrike_task_id: wrike_task_id.to_string(),
+        minutes,
+        tracked_date: tracked_date.to_string(),
+        comment: comment.to_string(),
+        label: label.to_string(),
+        attempts: 0,
+        last_error: None,
+        created_at: Utc::now(),
+    };
+    conn.execute(
+        "INSERT INTO pending_timelogs (id, wrike_task_id, minutes, tracked_date, comment, label, attempts, last_error, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, NULL, ?7)",
+        rusqlite::params![
+            row.id,
+            row.wrike_task_id,
+            row.minutes,
+            row.tracked_date,
+            row.comment,
+            row.label,
+            row.created_at.to_rfc3339(),
+        ],
+    )
+    .expect("enqueue timelog");
+    row
+}
+
+pub fn list_pending_timelogs(conn: &Connection) -> Vec<PendingTimelog> {
+    let mut stmt = conn
+        .prepare("SELECT * FROM pending_timelogs ORDER BY created_at ASC")
+        .expect("prepare pending timelogs");
+    stmt.query_map([], pending_timelog_from_row)
+        .expect("query pending timelogs")
+        .filter_map(Result::ok)
+        .collect()
+}
+
+pub fn count_pending_timelogs(conn: &Connection) -> i64 {
+    conn.query_row("SELECT COUNT(*) FROM pending_timelogs", [], |row| row.get(0))
+        .unwrap_or(0)
+}
+
+pub fn remove_pending_timelog(conn: &Connection, id: &str) {
+    conn.execute("DELETE FROM pending_timelogs WHERE id = ?1", [id])
+        .expect("remove pending timelog");
+}
+
+pub fn mark_pending_timelog_attempt(conn: &Connection, id: &str, error: &str) {
+    conn.execute(
+        "UPDATE pending_timelogs SET attempts = attempts + 1, last_error = ?2 WHERE id = ?1",
+        rusqlite::params![id, error],
+    )
+    .expect("mark pending timelog attempt");
 }
